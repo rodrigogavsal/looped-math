@@ -6,7 +6,7 @@ Maneja:
 - Exactitud exacta por nivel (métrica principal)
 - Entropía cruzada sobre la respuesta por nivel con teacher forcing (métrica secundaria)
 - Agrupamiento por longitud de prompt para generación en batch sin rellenar por la izquierda
-- Barrido de loops en test (loops_sweep) para modelos LoopedGPT (1 hasta 2*N)
+- Barrido de loops en test (loops_sweep) para modelos LoopedGPT (1 hasta N)
 - Impresión de 10 ejemplos generados para inspección manual
 """
 
@@ -216,15 +216,18 @@ def evaluate_loops_sweep(
     device: torch.device,
     max_loops: Optional[int] = None,
 ) -> Dict[str, Dict[str, float]]:
-    """Realiza el barrido de loops (1 hasta 2*N) sobre el conjunto de test.
+    """Realiza el barrido de loops (1 hasta N) sobre el conjunto de test.
 
-    Solo aplica a LoopedGPT. Devuelve {"1": {lvl: acc, ...}, "2": {...}, ...}
+    Solo aplica a LoopedGPT. Evalúa iteraciones de 1 a N para comprobar si
+    con menos loops que los entrenados el modelo ya es capaz de resolver el problema.
+    Devuelve {"1": {lvl: acc, ...}, "2": {...}, ...}
     """
     if not hasattr(model, "n_loops"):
         return {}
 
     n = model.n_loops
-    limit = max_loops if max_loops is not None else 2 * n
+    # Límite fijado a N (los loops con los que fue entrenado)
+    limit = max_loops if max_loops is not None else n
     sweep_results = {}
 
     for t in range(1, limit + 1):

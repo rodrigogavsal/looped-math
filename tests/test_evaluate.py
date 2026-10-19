@@ -39,6 +39,6 @@ def test_evaluate_generation_and_sweep():
     assert "2" in acc_by_level
     assert len(records) == 2
 
-    # Barrido de loops para N=2 debe evaluar loops 1..4 (1..2N)
+    # Barrido de loops para N=2 debe evaluar loops 1..2 (1..N)
     sweep = evaluate_loops_sweep(model, items, tok, device)
-    assert set(sweep.keys()) == {"1", "2", "3", "4"}
+    assert set(sweep.keys()) == {"1", "2"}
