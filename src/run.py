@@ -5,6 +5,11 @@ Uso:
   python -m src.run --all --seeds 0
   python -m src.run --runs looped_N4_d256 --seeds 0 --steps 200 (para pruebas rápidas)
 
+Nombres: --runs gpt_L1 lanza solo gpt_L1_d256 (no gpt_L12). La configuración opcional
+gpt_L4_d128 solo se lanza si se pide por su nombre completo o con --all --include-optional.
+Datos: hacen falta data/train, val, test_id, test_tpl y test_ood (python -m src.generate_data --out data).
+Los datos de juguete solo se usan con --toy-data (para probar el código, nunca para resultados).
+
 Características:
 - Carga configs/base.yaml y configs/experiments.yaml
 - Salta automáticamente los runs que ya tengan su results/<run>.json (reanudable)
@@ -19,6 +24,7 @@ import os
 import sys
 from typing import Any, Dict, List, Optional, Tuple
 
+import torch
 import yaml
 
 from src.data import create_toy_dataset_splits
@@ -65,6 +71,7 @@ def resolve_run_configs(
     requested_runs: Optional[List[str]],
     requested_seeds: List[int],
     run_all: bool = False,
+    include_optional: bool = False,
 ) -> List[Tuple[str, Dict[str, Any]]]:
     """Genera la lista de (run_name, full_cfg) resolviendo nombres y semillas."""
     # 1. Aplanar base_cfg si contiene secciones 'model' o 'train'
@@ -94,11 +101,15 @@ def resolve_run_configs(
     selected_configs = []
 
     for run_key, run_params in available_runs.items():
-        # Comprobar si coincide con alguno de los patrones solicitados
-        match = run_all
+        # Comprobar si coincide con alguno de los nombres solicitados.
+        # "gpt_L1" coincide con "gpt_L1_d256" pero NO con "gpt_L12_d256".
+        # Las configuraciones opcionales solo entran si se piden por su nombre exacto
+        # o con include_optional.
+        optional = bool(run_params.get("optional", False))
+        match = run_all and (include_optional or not optional)
         if requested_runs:
             for req in requested_runs:
-                if req == run_key or req in run_key or run_key.startswith(req):
+                if req == run_key or (run_key.startswith(req + "_") and not optional):
                     match = True
                     break
 
@@ -134,6 +145,13 @@ def main():
     parser.add_argument("--steps", type=int, default=None, help="Sobrescribir el número de pasos de entrenamiento")
     parser.add_argument("--eval-every", type=int, default=None, help="Sobrescribir la frecuencia de evaluación en val")
     parser.add_argument("--batch-size", type=int, default=None, help="Sobrescribir el tamaño de batch")
+    parser.add_argument("--grad-accum", type=int, default=None,
+                        help="Partir cada paso en N trozos (mismo resultado, menos memoria)")
+    parser.add_argument("--grad-checkpoint", action="store_true",
+                        help="Checkpointing de activaciones (mismo resultado, menos memoria, más lento)")
+    parser.add_argument("--include-optional", action="store_true", help="Con --all, incluir la configuración opcional")
+    parser.add_argument("--toy-data", action="store_true",
+                        help="Si faltan los datos, generar datos de juguete (solo para probar el código)")
     parser.add_argument("--force", action="store_true", help="Forzar re-ejecución incluso si ya existe results/<run>.json")
     parser.add_argument("--demo-samples", type=int, default=10, help="Número de ejemplos a imprimir al final del run")
     parser.add_argument("--device", default=None, help="Dispositivo forzado: cuda, mps, cpu")
@@ -148,11 +166,20 @@ def main():
     val_path = os.path.join(args.data_dir, "val.jsonl")
     test_id_path = os.path.join(args.data_dir, "test_id.jsonl")
     test_ood_path = os.path.join(args.data_dir, "test_ood.jsonl")
+    test_tpl_path = os.path.join(args.data_dir, "test_tpl.jsonl")
 
-    if not all(os.path.exists(p) for p in [train_path, val_path, test_id_path, test_ood_path]):
-        logger.warning(f"No se encontraron todos los ficheros de datos en '{args.data_dir}'. Generando datos de juguete...")
+    required = [train_path, val_path, test_id_path, test_tpl_path, test_ood_path]
+    missing = [p for p in required if not os.path.exists(p)]
+    if missing:
+        if not args.toy_data:
+            logger.error(
+                f"Faltan ficheros de datos: {missing}. Genera el dataset con "
+                f"'python -m src.generate_data --out {args.data_dir}' (o usa --toy-data solo para probar el código)."
+            )
+            sys.exit(1)
+        logger.warning(f"Faltan datos en '{args.data_dir}': se generan datos DE JUGUETE (no sirven para resultados).")
         create_toy_dataset_splits(output_dir=args.data_dir)
-        logger.info("Datos de juguete creados con éxito.")
+        test_tpl_path = None  # los datos de juguete no tienen test_tpl
 
     base_cfg = load_yaml(args.base_config)
     exp_cfg = load_yaml(args.config)
@@ -163,6 +190,7 @@ def main():
         requested_runs=args.runs,
         requested_seeds=args.seeds,
         run_all=args.all or (not args.runs),
+        include_optional=args.include_optional,
     )
 
     if not runs_to_execute:
@@ -189,6 +217,10 @@ def main():
             cfg["eval_every"] = args.eval_every
         if args.batch_size is not None:
             cfg["batch_size"] = args.batch_size
+        if args.grad_accum is not None:
+            cfg["grad_accum"] = args.grad_accum
+        if args.grad_checkpoint:
+            cfg["grad_checkpoint"] = True
 
         logger.info(f"[{idx}/{len(runs_to_execute)}] Ejecutando run: {run_name}")
 
@@ -203,6 +235,7 @@ def main():
                 device=dev,
                 run_name=run_name,
                 verbose=True,
+                test_tpl_source=test_tpl_path,
             )
             logger.info(f"✓ Run {run_name} completado con éxito en {record['train_time_s']}s.")
 

@@ -39,6 +39,28 @@ def test_evaluate_generation_and_sweep():
     assert "2" in acc_by_level
     assert len(records) == 2
 
-    # Barrido de loops para N=2 debe evaluar loops 1..2 (1..N)
+    # Barrido de loops para N=2 debe evaluar loops 1..4 (1..2N)
     sweep = evaluate_loops_sweep(model, items, tok, device)
-    assert set(sweep.keys()) == {"1", "2"}
+    assert set(sweep.keys()) == {"1", "2", "3", "4"}
+
+
+def test_full_evaluation_with_tpl_types_and_preds(tmp_path):
+    import json
+    from src.evaluate import run_full_evaluation
+    tok = get_tokenizer()
+    model = build_model({"arch": "looped", "n_loops": 2, "emb_dim": 32, "n_heads": 4,
+                         "vocab_size": tok.vocab_size, "context_length": 128})
+    def item(i, lvl, typ="A", sh=False):
+        return {"id": f"x{i}", "level": lvl, "type": typ, "shuffled": sh, "template": "A|t",
+                "question": "Ana tiene 2 canicas. ¿Cuántas tiene?", "answer": 2}
+    test_id = [item(1, 1), item(2, 2, "B", True)]
+    test_tpl = [item(3, 1, "B", False)]
+    test_ood = [item(4, 5), item(5, 6)]
+    preds = tmp_path / "preds.jsonl"
+    out = run_full_evaluation(model, test_id, test_ood, tok, torch.device("cpu"),
+                              test_tpl_source=test_tpl, preds_path=str(preds))
+    assert set(out) == {"test_id", "test_tpl", "test_ood", "loops_sweep", "loops_sweep_ood"}
+    assert set(out["test_id"]["acc_by_type"]) == {"A", "B desordenado"}
+    assert set(out["loops_sweep_ood"]["1"]) == {"5", "6"}
+    rows = [json.loads(l) for l in preds.read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 5 and {r["split"] for r in rows} == {"test_id", "test_tpl", "test_ood"}

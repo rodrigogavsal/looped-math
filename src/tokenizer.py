@@ -1,100 +1,98 @@
-"""Tokenizador por caracteres con vocabulario fijo según Sección 2.3 del contrato común.
+"""Tokenizador por caracteres con vocabulario FIJO (contrato común, sección 2.3).
 
-IDs especiales:
-  <pad> = 0
-  <eos> = 1
-  <unk> = 2
-Seguido de unos 100 caracteres en orden fijo:
-  espacio, salto de línea, 0-9, a-z, A-Z, á é í ó ú ü ñ Á É Í Ó Ú Ü Ñ, . ; : ¿ ? ¡ ! ( ) - " ' + × =
+El vocabulario no depende de los datos: así las partes 2, 3 y 4 pueden trabajar
+antes de que exista el dataset. El generador de problemas solo usa estos
+caracteres (lo comprueban los tests de datos).
+
+IDs: <pad> = 0, <eos> = 1, <unk> = 2, y después los caracteres en el orden de CHARS.
+
+Formato de un ejemplo (contrato, sección 2.2):
+    "Pregunta: " + pregunta + "\nRespuesta: " + str(respuesta)   seguido de <eos>
+La pérdida solo se calcula sobre los caracteres de la respuesta y el <eos>.
 """
 
-from typing import List, Union
+SPECIALS = ["<pad>", "<eos>", "<unk>"]
+CHARS = list(
+    " \n"
+    "0123456789"
+    "abcdefghijklmnopqrstuvwxyz"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "áéíóúüñÁÉÍÓÚÜÑ"
+    ".,;:¿?¡!()-\"'+×="
+)
+
+PROMPT_PREFIX = "Pregunta: "
+ANSWER_PREFIX = "\nRespuesta: "
+MAX_LEN = 512  # tokens por ejemplo, incluido el <eos> (= context_length del modelo)
+
+
+def format_prompt(question):
+    """Lo que recibe el modelo en evaluación: todo hasta 'Respuesta: ' incluido."""
+    return PROMPT_PREFIX + question + ANSWER_PREFIX
+
+
+def format_example(question, answer):
+    """Texto completo de entrenamiento, SIN el <eos> (se añade al tokenizar)."""
+    return format_prompt(question) + str(answer)
+
+
+def example_length(question, answer):
+    """Nº de tokens del ejemplo completo, incluido el <eos>."""
+    return len(format_example(question, answer)) + 1
 
 
 class CharTokenizer:
-    SPECIAL_TOKENS = ["<pad>", "<eos>", "<unk>"]
-    PAD_ID = 0
-    EOS_ID = 1
-    UNK_ID = 2
+    """Tokenizador por caracteres. Único para todo el repositorio (Partes 1-4)."""
+
+    SPECIAL_TOKENS = SPECIALS
+    PAD_ID, EOS_ID, UNK_ID = 0, 1, 2
 
     def __init__(self):
-        # 1. Especiales
-        vocab = list(self.SPECIAL_TOKENS)
-
-        # 2. Espacio y salto de línea
-        vocab.extend([" ", "\n"])
-
-        # 3. Dígitos 0-9
-        vocab.extend([str(i) for i in range(10)])
-
-        # 4. Letras minúsculas a-z
-        vocab.extend([chr(c) for c in range(ord("a"), ord("z") + 1)])
-
-        # 5. Letras mayúsculas A-Z
-        vocab.extend([chr(c) for c in range(ord("A"), ord("Z") + 1)])
-
-        # 6. Vocales con tilde y caracteres en español (minúsculas y mayúsculas)
-        vocab.extend(["á", "é", "í", "ó", "ú", "ü", "ñ"])
-        vocab.extend(["Á", "É", "Í", "Ó", "Ú", "Ü", "Ñ"])
-
-        # 7. Signos de puntuación y matemáticos
-        # Nota: '×' es el signo de multiplicación español/matemático
-        punctuation = [",", ".", ";", ":", "¿", "?", "¡", "!", "(", ")", "-", '"', "'", "+", "×", "="]
-        for p in punctuation:
-            if p not in vocab:
-                vocab.append(p)
-
-        self.vocab = vocab
-        self.char_to_id = {ch: idx for idx, ch in enumerate(self.vocab)}
-        self.id_to_char = {idx: ch for idx, ch in enumerate(self.vocab)}
-
-        self.vocab_size = len(self.vocab)
-        self.pad_id = self.PAD_ID
-        self.eos_id = self.EOS_ID
-        self.unk_id = self.UNK_ID
-
-    def encode(self, text: str) -> List[int]:
-        """Convierte una cadena de texto en una lista de enteros (IDs de tokens)."""
-        tokens = []
-        for ch in text:
-            # Tolerancia: si se usa '*' convertirlo a '×' para robustez aritmética
-            if ch == "*":
-                ch = "×"
-            tokens.append(self.char_to_id.get(ch, self.unk_id))
-        return tokens
-
-    def decode(self, token_ids: List[int], skip_special: bool = False) -> str:
-        """Convierte una lista de enteros (IDs de tokens) en una cadena de texto."""
-        chars = []
-        for tok in token_ids:
-            if isinstance(tok, int):
-                tid = tok
-            else:
-                tid = int(tok)
-
-            if tid == self.pad_id:
-                if not skip_special:
-                    chars.append("")
-            elif tid == self.eos_id:
-                if not skip_special:
-                    chars.append("<eos>")
-            elif tid == self.unk_id:
-                if not skip_special:
-                    chars.append("<unk>")
-            else:
-                chars.append(self.id_to_char.get(tid, ""))
-        return "".join(chars)
+        self.itos = SPECIALS + CHARS
+        self.stoi = {s: i for i, s in enumerate(self.itos)}
+        self.pad_id, self.eos_id, self.unk_id = self.PAD_ID, self.EOS_ID, self.UNK_ID
+        self.vocab_size = len(self.itos)
+        # Alias con los nombres que usa el código de las Partes 2 y 3
+        self.vocab = self.itos
+        self.char_to_id = self.stoi
+        self.id_to_char = dict(enumerate(self.itos))
 
     def __len__(self):
         return self.vocab_size
 
+    def encode(self, text, add_eos=False):
+        # '*' se normaliza a '×' (el dataset no usa ninguno de los dos; es solo por robustez)
+        ids = [self.stoi.get("×" if c == "*" else c, self.unk_id) for c in text]
+        if add_eos:
+            ids.append(self.eos_id)
+        return ids
 
-# Instancia por defecto
-_default_tokenizer = None
+    def decode(self, ids, skip_special=True):
+        out = []
+        for i in ids:
+            i = int(i)
+            if i < len(SPECIALS):
+                if skip_special:
+                    continue
+                out.append(self.itos[i])
+            else:
+                out.append(self.itos[i])
+        return "".join(out)
+
+    def is_supported(self, text):
+        """True si todos los caracteres están en el vocabulario (ninguno sería <unk>)."""
+        return all(c in self.stoi and self.stoi[c] >= len(SPECIALS) for c in text)
+
+    def unsupported_chars(self, text):
+        return sorted({c for c in text if not (c in self.stoi and self.stoi[c] >= len(SPECIALS))})
 
 
-def get_tokenizer() -> CharTokenizer:
-    global _default_tokenizer
-    if _default_tokenizer is None:
-        _default_tokenizer = CharTokenizer()
-    return _default_tokenizer
+_DEFAULT = None
+
+
+def get_tokenizer():
+    """Instancia compartida del tokenizador (la usan data.py, train.py, evaluate.py, run.py)."""
+    global _DEFAULT
+    if _DEFAULT is None:
+        _DEFAULT = CharTokenizer()
+    return _DEFAULT

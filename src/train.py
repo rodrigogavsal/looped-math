@@ -3,6 +3,9 @@
 Maneja:
 - Hiperparámetros fijados en base.yaml (AdamW, lr 1e-3, warmup 200 pasos + coseno al 10%)
 - Recorte de gradientes a 1.0
+- Ahorro de memoria opcional, sin cambiar el resultado:
+    grad_accum: N  -> cada paso se hace en N trozos de batch_size/N ejemplos (mismo batch efectivo)
+    grad_checkpoint: true -> recalcula las activaciones de cada bloque en el backward
 - Precisión mixta automática (bf16 si soporta, fp16 con GradScaler si no)
 - Semillas fijadas (torch, numpy, random)
 - Evaluación rápida en validación cada 250 pasos (entropía cruzada y teacher forcing)
@@ -119,6 +122,7 @@ def train_run(
     checkpoints_dir: str = "checkpoints",
     results_dir: str = "results",
     verbose: bool = True,
+    test_tpl_source: Optional[Union[str, List[Dict[str, Any]]]] = None,
 ) -> Tuple[Dict[str, Any], nn.Module]:
     """Entrena un run de la matriz de principio a fin, lo evalúa y guarda los resultados."""
     if device is None:
@@ -141,6 +145,7 @@ def train_run(
 
     # Construir modelo
     model = build_model(cfg).to(device)
+    model.grad_checkpoint = bool(cfg.get("grad_checkpoint", False))
     n_params = count_params(model)
     flops = flops_per_token(cfg)
 
@@ -152,8 +157,15 @@ def train_run(
 
     # DataLoaders
     batch_size = cfg.get("batch_size", 64)
+    grad_accum = int(cfg.get("grad_accum", 1))
+    if grad_accum < 1 or batch_size % grad_accum != 0:
+        raise ValueError(f"batch_size={batch_size} tiene que ser múltiplo de grad_accum={grad_accum}")
+    micro_batch = batch_size // grad_accum
+    if verbose and (grad_accum > 1 or model.grad_checkpoint):
+        print(f"  Ahorro de memoria: {grad_accum} trozos de {micro_batch} ejemplos por paso"
+              f"{', checkpointing de activaciones' if model.grad_checkpoint else ''}")
     train_loader = create_dataloader(
-        train_source, tokenizer=tokenizer, batch_size=batch_size, shuffle=True
+        train_source, tokenizer=tokenizer, batch_size=micro_batch, shuffle=True
     )
     val_loader = create_dataloader(
         val_source, tokenizer=tokenizer, batch_size=batch_size, shuffle=False
@@ -190,32 +202,48 @@ def train_run(
         for param_group in optimizer.param_groups:
             param_group["lr"] = current_lr
 
-        # Obtener batch (bucle infinito sobre el dataset de entrenamiento)
-        try:
-            batch = next(train_iter)
-        except StopIteration:
-            train_iter = iter(train_loader)
-            batch = next(train_iter)
+        # Obtener los trozos del batch (bucle infinito sobre el dataset de entrenamiento).
+        # Con grad_accum = 1 es un único batch de batch_size ejemplos, como antes.
+        micro_batches = []
+        for _ in range(grad_accum):
+            try:
+                micro_batches.append(next(train_iter))
+            except StopIteration:
+                train_iter = iter(train_loader)
+                micro_batches.append(next(train_iter))
 
-        x = batch["x"].to(device)
-        y = batch["y"].to(device)
+        # La pérdida es la media sobre TODOS los tokens de respuesta del batch completo:
+        # cada trozo suma su pérdida y se divide por el total de tokens válidos del batch.
+        # Así el gradiente es el mismo que con un único batch de batch_size ejemplos.
+        n_valid = sum(int((mb["y"] != IGNORE_INDEX).sum()) for mb in micro_batches)
 
         optimizer.zero_grad(set_to_none=True)
-
-        with autocast_ctx:
-            logits = model(x)
-            loss = F.cross_entropy(logits.view(-1, cfg["vocab_size"]), y.view(-1), ignore_index=IGNORE_INDEX)
+        loss_total = 0.0
+        for mb in micro_batches:
+            x = mb["x"].to(device)
+            y = mb["y"].to(device)
+            with autocast_ctx:
+                logits = model(x)
+                loss_sum = F.cross_entropy(
+                    logits.view(-1, cfg["vocab_size"]).float(), y.view(-1),
+                    ignore_index=IGNORE_INDEX, reduction="sum",
+                )
+                loss = loss_sum / max(1, n_valid)
+            if scaler is not None:
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
+            loss_total += loss.item()
 
         if scaler is not None:
-            scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             scaler.step(optimizer)
             scaler.update()
         else:
-            loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
+        loss = torch.tensor(loss_total)
 
         # Evaluación periódica en validación
         if step % eval_every == 0 or step == total_steps - 1:
@@ -256,7 +284,7 @@ def train_run(
 
     # Evaluación completa al finalizar (generación greedy + loops sweep)
     if verbose:
-        print("  Ejecutando evaluación completa (test_id, test_ood, loops_sweep)...")
+        print("  Ejecutando evaluación completa (test_id, test_tpl, test_ood, loops_sweep)...")
 
     eval_results = run_full_evaluation(
         model=model,
@@ -265,6 +293,8 @@ def train_run(
         tokenizer=tokenizer,
         device=device,
         run_loops_sweep=(cfg.get("arch", "looped") == "looped"),
+        test_tpl_source=test_tpl_source,
+        preds_path=os.path.join(results_dir, f"{run_name}_preds.jsonl"),
     )
 
     # Construir JSON final según Sección 2.7
@@ -284,8 +314,10 @@ def train_run(
 
     if verbose:
         print(f"  Resultados guardados en: {results_path}")
-        print("  Resumen exactitud test_id:", eval_results["test_id"]["acc_by_level"])
-        print("  Resumen exactitud test_ood:", eval_results["test_ood"]["acc_by_level"])
+        for split in ("test_id", "test_tpl", "test_ood"):
+            if split in eval_results:
+                r = eval_results[split]
+                print(f"  {split}: por nivel {r['acc_by_level']} | total {r['acc_total']} | por tipo {r['acc_by_type']}")
 
     return results_record, model
 

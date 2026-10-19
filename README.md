@@ -14,12 +14,18 @@ looped-math/
 ├── configs/
 │   ├── base.yaml              # Hiperparámetros por defecto
 │   └── experiments.yaml       # Matriz de configuraciones y semillas
-├── data/                      # Datasets JSONL generados (ignorados en git salvo data_card.md)
-│   └── data_card.md           # Estadísticas y documentación del dataset
+├── docs/
+│   └── DATASET.md             # Documentación del dataset (Parte 1): diseño, formato, calibración, hipótesis
+├── data/                      # Datasets JSONL generados (ignorados en git salvo data_card.md y sample/)
+│   ├── data_card.md           # Estadísticas del dataset (la genera generate_data.py)
+│   └── sample/                # Muestra pequeña (50 problemas por nivel y fichero) para desarrollar
 ├── src/
 │   ├── __init__.py
-│   ├── tokenizer.py           # Tokenizador por caracteres (CharTokenizer)
-│   ├── generate_data.py       # Generador de problemas matemáticos por niveles
+│   ├── tokenizer.py           # Tokenizador por caracteres (CharTokenizer), único para todo el repo
+│   ├── generate_data.py       # Generador de problemas matemáticos por niveles (Parte 1)
+│   ├── text_solver.py         # Verificación independiente del dataset leyendo solo el texto
+│   ├── calibrate.py           # Calibración de la dificultad con un GPT (Parte 1)
+│   ├── eval_templates.py      # Exactitud por redacción reservada de test_tpl con un checkpoint
 │   ├── model.py               # GPTModel, LoopedGPT, build_model, parámetros y FLOPs
 │   ├── benchmark.py           # Benchmark de memoria VRAM, velocidad y tablas LaTeX/MD
 │   ├── data.py                # Dataset y DataLoader con máscara sobre la pregunta
@@ -77,7 +83,33 @@ python check_env.py
 
 ---
 
-## 3. Verificación rápida y Benchmark de Hardware
+## 3. Datos
+
+```bash
+python -m src.generate_data --out data       # ~25 s; genera train, val, test_id, test_tpl, test_ood y data_card.md
+```
+
+Las huellas SHA-256 que deben salir están en `docs/DATASET.md` (sección 5.1). `src/run.py` se niega a
+entrenar si falta algún fichero (antes generaba datos de juguete en silencio; ahora solo con `--toy-data`).
+
+---
+
+## 4. Memoria de GPU
+
+- La atención usa `F.scaled_dot_product_attention` (no guarda la matriz T×T) y la GELU va fusionada.
+  Mismo resultado que el notebook (lo comprueba `tests/test_memory.py`); con `return_attn=True` se usa la
+  versión explícita, que devuelve los pesos para el análisis.
+- `grad_accum: N` (en `configs/` o con `--grad-accum N`) parte cada paso en N trozos de `batch_size/N`:
+  el batch efectivo sigue siendo 64 y el gradiente es el mismo. Está a 2 en los modelos de profundidad
+  8 y 12 para que quepan en 4 GB.
+- `grad_checkpoint: true` (o `--grad-checkpoint`) recalcula las activaciones en el backward: aún menos
+  memoria, ~30 % más lento, mismo resultado.
+- `python -m src.benchmark` prueba cada modelo con batch 64 y, si no cabe, con 2 y 4 trozos y con
+  checkpointing; la tabla dice qué opción usar en cada máquina.
+
+---
+
+## 5. Verificación rápida y Benchmark de Hardware
 
 Para ejecutar los tests de corrección del modelo:
 
@@ -93,7 +125,7 @@ python -m src.benchmark
 
 ---
 
-## 4. Registro de máquinas del equipo
+## 6. Registro de máquinas del equipo
 
 Ejecutad `python check_env.py` en cada ordenador y anotad los datos en la siguiente tabla:
 
@@ -106,7 +138,7 @@ Ejecutad `python check_env.py` en cada ordenador y anotad los datos en la siguie
 
 ---
 
-## 5. Tabla de Parámetros y FLOPs de la Matriz Experimental
+## 7. Tabla de Parámetros y FLOPs de la Matriz Experimental
 
 Valores calculados con `vocab_size = 97` y `context_length = 512` (`python -m src.benchmark --skip-benchmark`):
 

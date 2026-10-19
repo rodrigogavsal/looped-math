@@ -1,4 +1,10 @@
 # Matriz de experimentos: 9 configuraciones principales x 3 semillas = 27 runs (+ 1 config opcional)
+#
+# Memoria: grad_accum: N parte cada paso en N trozos de batch_size/N ejemplos (el batch efectivo
+# sigue siendo 64 y el gradiente es el mismo). Está puesto a 2 en los modelos de profundidad 8 y 12
+# porque con batch 64 completo no caben en una GPU de 4 GB. Con una GPU de 8 GB o más se puede
+# quitar. `python -m src.benchmark` comprueba qué cabe en cada máquina. Si aun así no cabe:
+# grad_accum: 4, y como último recurso grad_checkpoint: true (más lento, mismo resultado).
 
 seeds: [0, 1, 2]
 
@@ -45,6 +51,7 @@ experiments:
     n_loops: 1
     emb_dim: 256
     n_heads: 8
+    grad_accum: 2           # batch 64 en 2 trozos de 32: mismo resultado, la mitad de memoria (4 GB)
     optional: false
     description: "GPT L=8 con pesos independientes por capa"
 
@@ -54,6 +61,7 @@ experiments:
     n_loops: 1
     emb_dim: 256
     n_heads: 8
+    grad_accum: 2           # batch 64 en 2 trozos de 32: mismo resultado, la mitad de memoria (4 GB)
     optional: false
     description: "GPT L=12 (profundidad del GPT-2 original)"
 
@@ -82,6 +90,7 @@ experiments:
     n_loops: 8
     emb_dim: 256
     n_heads: 8
+    grad_accum: 2           # batch 64 en 2 trozos de 32: mismo resultado, la mitad de memoria (4 GB)
     optional: false
     description: "Looped Transformer con 1 bloque y N=8 iteraciones"
 
@@ -91,6 +100,7 @@ experiments:
     n_loops: 12
     emb_dim: 256
     n_heads: 8
+    grad_accum: 2           # batch 64 en 2 trozos de 32: mismo resultado, la mitad de memoria (4 GB)
     optional: false
     description: "Looped Transformer con 1 bloque y N=12 iteraciones"
 

@@ -6,7 +6,9 @@ Maneja:
 - Exactitud exacta por nivel (métrica principal)
 - Entropía cruzada sobre la respuesta por nivel con teacher forcing (métrica secundaria)
 - Agrupamiento por longitud de prompt para generación en batch sin rellenar por la izquierda
-- Barrido de loops en test (loops_sweep) para modelos LoopedGPT (1 hasta N)
+- Barrido de loops en test (loops_sweep) para modelos LoopedGPT (1 hasta 2*N), en test_id y test_ood
+- test_tpl (redacciones no vistas, H7) y desglose por tipo de problema (A / B ordenado / B desordenado, H6)
+- Predicción de cada problema en results/<run>_preds.jsonl, para el análisis de la Parte 4
 - Impresión de 10 ejemplos generados para inspección manual
 """
 
@@ -34,6 +36,25 @@ def extract_number(text: str) -> Optional[int]:
         except ValueError:
             return None
     return None
+
+
+def problem_group(item: Dict[str, Any]) -> str:
+    """Grupo del problema para H6: 'A', 'B ordenado' o 'B desordenado' (datos sin 'type': 'A')."""
+    if item.get("type", "A") == "A":
+        return "A"
+    return "B desordenado" if item.get("shuffled") else "B ordenado"
+
+
+def summarize_records(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Exactitud total y por grupo de problema a partir de los registros de evaluate_generation."""
+    by_type = collections.defaultdict(list)
+    for r in records:
+        by_type[r["type"]].append(r["correct"])
+    total = [r["correct"] for r in records]
+    return {
+        "acc_total": round(sum(total) / len(total), 4) if total else 0.0,
+        "acc_by_type": {t: round(sum(v) / len(v), 4) for t, v in sorted(by_type.items())},
+    }
 
 
 @torch.no_grad()
@@ -149,6 +170,8 @@ def evaluate_generation(
                 detailed_records.append({
                     "id": c["item"].get("id"),
                     "level": lvl,
+                    "type": problem_group(c["item"]),
+                    "template": c["item"].get("template"),
                     "question": c["item"]["question"],
                     "true_answer": true_ans,
                     "generated_text": gen_text,
@@ -216,18 +239,15 @@ def evaluate_loops_sweep(
     device: torch.device,
     max_loops: Optional[int] = None,
 ) -> Dict[str, Dict[str, float]]:
-    """Realiza el barrido de loops (1 hasta N) sobre el conjunto de test.
+    """Realiza el barrido de loops (1 hasta 2*N) sobre el conjunto de test.
 
-    Solo aplica a LoopedGPT. Evalúa iteraciones de 1 a N para comprobar si
-    con menos loops que los entrenados el modelo ya es capaz de resolver el problema.
-    Devuelve {"1": {lvl: acc, ...}, "2": {...}, ...}
+    Solo aplica a LoopedGPT. Devuelve {"1": {lvl: acc, ...}, "2": {...}, ...}
     """
     if not hasattr(model, "n_loops"):
         return {}
 
     n = model.n_loops
-    # Límite fijado a N (los loops con los que fue entrenado)
-    limit = max_loops if max_loops is not None else n
+    limit = max_loops if max_loops is not None else 2 * n
     sweep_results = {}
 
     for t in range(1, limit + 1):
@@ -250,8 +270,16 @@ def run_full_evaluation(
     tokenizer: CharTokenizer,
     device: torch.device,
     run_loops_sweep: bool = True,
+    test_tpl_source: Optional[Union[str, List[Dict[str, Any]]]] = None,
+    preds_path: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Ejecuta la batería de evaluación completa según el esquema de la Sección 2.7."""
+    """Ejecuta la batería de evaluación completa según el esquema de la Sección 2.7.
+
+    Para cada fichero (test_id, test_tpl si se da, test_ood): exactitud por nivel, total y por
+    grupo de problema, y entropía cruzada por nivel. En modelos looped, barrido de loops 1..2N
+    en test_id ("loops_sweep", como antes) y en test_ood ("loops_sweep_ood").
+    Si se da preds_path, guarda una línea por problema con la predicción del modelo.
+    """
     # Cargar datos si son rutas
     def _load(src):
         if isinstance(src, str):
@@ -259,34 +287,34 @@ def run_full_evaluation(
                 return [json.loads(line) for line in f if line.strip()]
         return list(src)
 
-    test_id_items = _load(test_id_source)
-    test_ood_items = _load(test_ood_source)
+    splits = [("test_id", _load(test_id_source))]
+    if test_tpl_source is not None:
+        splits.append(("test_tpl", _load(test_tpl_source)))
+    splits.append(("test_ood", _load(test_ood_source)))
 
-    # 1. Test ID (niveles 1-4)
-    acc_id, _ = evaluate_generation(model, test_id_items, tokenizer, device)
-    dl_id = create_dataloader(test_id_items, tokenizer=tokenizer, batch_size=64, shuffle=False)
-    ce_id = evaluate_teacher_forcing_ce(model, dl_id, device)
+    eval_out: Dict[str, Any] = {}
+    all_preds: List[Dict[str, Any]] = []
+    for name, items in splits:
+        acc, records = evaluate_generation(model, items, tokenizer, device)
+        dl = create_dataloader(items, tokenizer=tokenizer, batch_size=64, shuffle=False)
+        ce = evaluate_teacher_forcing_ce(model, dl, device)
+        eval_out[name] = {"acc_by_level": acc, **summarize_records(records), "ce_answer_by_level": ce}
+        for r in records:
+            all_preds.append({
+                "split": name, "id": r["id"], "level": int(r["level"]), "type": r["type"],
+                "template": r["template"], "answer": r["true_answer"],
+                "pred": r["extracted_number"], "generated": r["generated_text"], "correct": int(r["correct"]),
+            })
 
-    # 2. Test OOD (niveles 5-6)
-    acc_ood, _ = evaluate_generation(model, test_ood_items, tokenizer, device)
-    dl_ood = create_dataloader(test_ood_items, tokenizer=tokenizer, batch_size=64, shuffle=False)
-    ce_ood = evaluate_teacher_forcing_ce(model, dl_ood, device)
-
-    eval_out = {
-        "test_id": {
-            "acc_by_level": acc_id,
-            "ce_answer_by_level": ce_id,
-        },
-        "test_ood": {
-            "acc_by_level": acc_ood,
-            "ce_answer_by_level": ce_ood,
-        },
-    }
-
-    # 3. Loops sweep si el modelo es LoopedGPT
+    # Barrido de loops si el modelo es LoopedGPT (H5: en test_id y en test_ood)
     if hasattr(model, "n_loops") and run_loops_sweep:
-        sweep = evaluate_loops_sweep(model, test_id_items, tokenizer, device)
-        eval_out["loops_sweep"] = sweep
+        eval_out["loops_sweep"] = evaluate_loops_sweep(model, splits[0][1], tokenizer, device)
+        eval_out["loops_sweep_ood"] = evaluate_loops_sweep(model, splits[-1][1], tokenizer, device)
+
+    if preds_path is not None:
+        with open(preds_path, "w", encoding="utf-8", newline="\n") as f:
+            for p in all_preds:
+                f.write(json.dumps(p, ensure_ascii=False) + "\n")
 
     return eval_out
 

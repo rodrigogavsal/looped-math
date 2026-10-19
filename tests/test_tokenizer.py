@@ -30,3 +30,10 @@ def test_multiplication_sign():
     # '*' se normaliza a '×' para robustez
     ids2 = tok.encode("3 * 4")
     assert ids1 == ids2
+
+
+def test_ids_match_contract():
+    """IDs fijos del contrato (docs/DATASET.md, 6.2): los checkpoints de todas las partes son compatibles."""
+    tok = get_tokenizer()
+    assert tok.vocab_size == 97
+    assert tok.encode(" \n09azAZáÑ.,=") == [3, 4, 5, 14, 15, 40, 41, 66, 67, 80, 81, 82, 96]
