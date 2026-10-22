@@ -39,9 +39,9 @@ def test_evaluate_generation_and_sweep():
     assert "2" in acc_by_level
     assert len(records) == 2
 
-    # Barrido de loops para N=2 debe evaluar loops 1..4 (1..2N)
+    # Barrido de loops para N=2 debe evaluar loops 1..2 (1..N)
     sweep = evaluate_loops_sweep(model, items, tok, device)
-    assert set(sweep.keys()) == {"1", "2", "3", "4"}
+    assert set(sweep.keys()) == {"1", "2"}
 
 
 def test_full_evaluation_with_tpl_types_and_preds(tmp_path):
@@ -61,6 +61,8 @@ def test_full_evaluation_with_tpl_types_and_preds(tmp_path):
                               test_tpl_source=test_tpl, preds_path=str(preds))
     assert set(out) == {"test_id", "test_tpl", "test_ood", "loops_sweep", "loops_sweep_ood"}
     assert set(out["test_id"]["acc_by_type"]) == {"A", "B desordenado"}
+    assert set(out["loops_sweep"]) == {"1", "2", "3", "4"}     # test_id: 1..2N
+    assert set(out["loops_sweep_ood"]) == {"1", "2", "3", "4"}  # test_ood: 1..2N
     assert set(out["loops_sweep_ood"]["1"]) == {"5", "6"}
     rows = [json.loads(l) for l in preds.read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 5 and {r["split"] for r in rows} == {"test_id", "test_tpl", "test_ood"}

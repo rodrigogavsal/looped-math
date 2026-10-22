@@ -62,7 +62,7 @@ experiments:
     emb_dim: 256
     n_heads: 8
     grad_accum: 2           # batch 64 en 2 trozos de 32: mismo resultado, la mitad de memoria (4 GB)
-    optional: false
+    optional: true
     description: "GPT L=12 (profundidad del GPT-2 original)"
 
   # --- Familia Looped Transformer (1 bloque compartido aplicado N veces, profundidad efectiva = N) ---
@@ -101,7 +101,7 @@ experiments:
     emb_dim: 256
     n_heads: 8
     grad_accum: 2           # batch 64 en 2 trozos de 32: mismo resultado, la mitad de memoria (4 GB)
-    optional: false
+    optional: true
     description: "Looped Transformer con 1 bloque y N=12 iteraciones"
 
   # --- Configuración opcional Iso-Parámetros + Iso-Profundidad con Looped N=4 ---
@@ -111,5 +111,5 @@ experiments:
     n_loops: 1
     emb_dim: 128
     n_heads: 4
-    optional: true
+    optional: false
     description: "GPT L=4, d=128 (~mismos parámetros y misma profundidad que Looped N=4, d=256)"

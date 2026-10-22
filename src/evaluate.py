@@ -6,7 +6,9 @@ Maneja:
 - Exactitud exacta por nivel (métrica principal)
 - Entropía cruzada sobre la respuesta por nivel con teacher forcing (métrica secundaria)
 - Agrupamiento por longitud de prompt para generación en batch sin rellenar por la izquierda
-- Barrido de loops en test (loops_sweep) para modelos LoopedGPT (1 hasta 2*N), en test_id y test_ood
+- Barrido de loops para modelos LoopedGPT: de 1 a 2N tanto en test_id ("loops_sweep") como en test_ood
+  ("loops_sweep_ood"), para ver si dar más loops que los entrenados ayuda (H5). Las claves 1..N de
+  "loops_sweep" son las de siempre; N+1..2N son las añadidas.
 - test_tpl (redacciones no vistas, H7) y desglose por tipo de problema (A / B ordenado / B desordenado, H6)
 - Predicción de cada problema en results/<run>_preds.jsonl, para el análisis de la Parte 4
 - Impresión de 10 ejemplos generados para inspección manual
@@ -239,15 +241,18 @@ def evaluate_loops_sweep(
     device: torch.device,
     max_loops: Optional[int] = None,
 ) -> Dict[str, Dict[str, float]]:
-    """Realiza el barrido de loops (1 hasta 2*N) sobre el conjunto de test.
+    """Realiza el barrido de loops (1 hasta N) sobre el conjunto de test.
 
-    Solo aplica a LoopedGPT. Devuelve {"1": {lvl: acc, ...}, "2": {...}, ...}
+    Solo aplica a LoopedGPT. Evalúa iteraciones de 1 a N para comprobar si
+    con menos loops que los entrenados el modelo ya es capaz de resolver el problema.
+    Devuelve {"1": {lvl: acc, ...}, "2": {...}, ...}
     """
     if not hasattr(model, "n_loops"):
         return {}
 
     n = model.n_loops
-    limit = max_loops if max_loops is not None else 2 * n
+    # Límite fijado a N (los loops con los que fue entrenado)
+    limit = max_loops if max_loops is not None else n
     sweep_results = {}
 
     for t in range(1, limit + 1):
@@ -308,8 +313,13 @@ def run_full_evaluation(
 
     # Barrido de loops si el modelo es LoopedGPT (H5: en test_id y en test_ood)
     if hasattr(model, "n_loops") and run_loops_sweep:
-        eval_out["loops_sweep"] = evaluate_loops_sweep(model, splits[0][1], tokenizer, device)
-        eval_out["loops_sweep_ood"] = evaluate_loops_sweep(model, splits[-1][1], tokenizer, device)
+        eval_out["loops_sweep"] = evaluate_loops_sweep(
+            model, splits[0][1], tokenizer, device, max_loops=2 * model.n_loops
+        )
+        # Ambos barridos llegan a 2N: la pregunta de H5 es si MÁS loops que los entrenados ayudan.
+        eval_out["loops_sweep_ood"] = evaluate_loops_sweep(
+            model, splits[-1][1], tokenizer, device, max_loops=2 * model.n_loops
+        )
 
     if preds_path is not None:
         with open(preds_path, "w", encoding="utf-8", newline="\n") as f:
