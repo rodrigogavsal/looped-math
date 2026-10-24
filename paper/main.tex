@@ -1,0 +1,80 @@
+% Memoria de la Práctica 1 (PLN I, 2026-27). Formato ACL, máximo 4 páginas sin referencias.
+%
+% Compilación (desde esta carpeta):   latexmk -pdf main.tex
+% Requiere acl.sty y acl_natbib.bst del repositorio oficial acl-org/acl-style-files.
+%
+% Convención de marcadores (todo lo que salga en rojo debe desaparecer antes de entregar):
+%   \pend{texto}  -> dato o cifra pendiente de confirmar o de obtener
+%   \todo{texto}  -> párrafo por redactar cuando haya resultados
+% Comprobación previa a la entrega:  grep -rn "pend{\|todo{" sections main.tex
+\documentclass[11pt]{article}
+
+\usepackage[preprint]{acl}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{inconsolata}
+\usepackage[spanish,es-tabla,es-nodecimaldot]{babel}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% ---------- Macros de trabajo ----------
+\newcommand{\pend}[1]{\textcolor{red}{#1}}
+\newcommand{\todo}[1]{\textcolor{red}{[\textbf{PENDIENTE}: #1]}}
+% Inserta la figura si existe en figures/; si no, deja un recuadro visible.
+\newcommand{\figorph}[3]{%
+  \IfFileExists{figures/#1}%
+    {\includegraphics[width=#2]{figures/#1}}%
+    {\fbox{\parbox{#2}{\centering\small\textcolor{red}{Figura pendiente:\\#3}}}}}
+
+% Análisis interno (logit lens, atención): activar con \internotrue cuando haya puntos de control.
+\newif\ifinterno
+\internotrue
+
+% ---------- Notación ----------
+\newcommand{\hid}[1]{\mathbf{h}_{#1}}
+\newcommand{\LN}{\mathrm{LN}}
+\newcommand{\MHA}{\mathrm{MHA}}
+\newcommand{\FFN}{\mathrm{FFN}}
+
+\title{Profundidad por recurrencia: un \emph{Looped Transformer} frente a GPT\\
+en problemas aritméticos en castellano de dificultad controlada}
+
+\author{\textbf{Alejandro García Belmonte}\\Universitat d'Alacant
+\And \textbf{Stanislav Gatin}\\Universitat d'Alacant
+\AND \textbf{Rodrigo Gavilán Salmerón}\\Universitat d'Alacant
+\And \textbf{Pau Mateo Lillo}\\Universitat d'Alacant}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Un \emph{Looped Transformer} aplica $N$ veces un único bloque con los mismos
+pesos y obtiene profundidad de cómputo sin parámetros adicionales. Lo
+implementamos desde cero junto a un GPT, con una interfaz común validada
+numéricamente, y los entrenamos en problemas aritméticos en castellano de 1 a 6
+operaciones, reservando los niveles 5 y 6 para medir la generalización.
+Comparamos ambas familias a igual profundidad, parámetros y cómputo, y
+estudiamos el interior del bucle con \emph{logit lens} y métricas de
+representación y atención. Con ocho iteraciones, un Looped Transformer de
+0.97\,M de parámetros iguala o supera a un GPT de ocho capas con 6.5\,M, sobre
+todo en problemas con más operaciones que los vistos al entrenar, y las
+iteraciones necesarias crecen con la dificultad; con dos y cuatro queda al nivel
+de un GPT de igual profundidad o algo por debajo.
+\end{abstract}
+
+\input{sections/01_introduccion}
+\input{sections/02_relacionado}
+\input{sections/03_metodo}
+\input{sections/04_experimentos}
+\input{sections/05_analisis}
+\input{sections/06_conclusiones}
+
+\bibliography{references}
+
+\end{document}
