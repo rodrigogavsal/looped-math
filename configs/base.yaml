@@ -20,8 +20,8 @@ train:
   betas: [0.9, 0.95]
   weight_decay: 0.1
   warmup_steps: 200
-  steps: 10000
-  total_steps: 10000
+  steps: 45000         # Obtenido empíricamente fijandonos en los resultados del modelo base
+  total_steps: 45000
   batch_size: 64
   grad_clip: 1.0
   eval_every: 250
