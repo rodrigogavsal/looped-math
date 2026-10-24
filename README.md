@@ -18,24 +18,57 @@ looped-math/
 │   └── data_card.md           # Estadísticas y documentación del dataset
 ├── src/
 │   ├── __init__.py
-│   ├── tokenizer.py           # Tokenizador por caracteres (CharTokenizer)
-│   ├── generate_data.py       # Generador de problemas matemáticos por niveles
 │   ├── model.py               # GPTModel, LoopedGPT, build_model, parámetros y FLOPs
 │   ├── benchmark.py           # Benchmark de memoria VRAM, velocidad y tablas LaTeX/MD
-│   ├── data.py                # Dataset y DataLoader con máscara sobre la pregunta
-│   ├── train.py               # Bucle de entrenamiento con AMP, warmup + coseno
-│   ├── evaluate.py            # Evaluación por generación greedy y barrido de loops
-│   ├── run.py                 # Lanzador reanudable de experimentos
 │   └── analysis/              # Métricas de representación, atención y figuras
-├── tests/                     # Suite de tests con pytest
-├── notebooks/                 # Cuadernos de definiciones de referencia
-│   ├── base.ipynb             # Definiciones base del modelo GPT-2 e instrumentación
-│   └── loop.ipynb             # Definiciones de LoopedGPT heredando de base.ipynb
+├── tests/                     # Suite de tests con pytest (test_model.py)
+├── notebooks/                 # Cuadernos con la implementación original
+│   ├── base.ipynb             # Implementación original de GPT-2 base e instrumentación
+│   └── loop.ipynb             # Implementación original de LoopedGPT y experimentos interactivos
 ├── checkpoints/               # Pesos entrenados (.pt, ignorado en git)
 ├── results/                   # Métricas y curvas (.json, ignorado en git)
 ├── figures/                   # Gráficas y tablas generadas (ignorado en git)
 └── paper/                     # Plantilla LaTeX del artículo
 ```
+
+### 1.1 Descripción de cada carpeta y origen del código
+
+Este repositorio organiza tanto la exploración interactiva como la base de código modular para el proyecto:
+
+* **`notebooks/` (Implementación original de los modelos y exploración interactiva)**:
+  Fue el punto de partida y la **implementación original** de las arquitecturas:
+  - `base.ipynb`: Implementación original del modelo GPT estándar (atención causal multi-cabeza, Pre-LayerNorm, bloques Transformer, `GPTModel` e instrumentación de estados ocultos y atención).
+  - `loop.ipynb`: Implementación original de la recurrencia en profundidad (`LoopedGPT`), herencia de bloques compartidos, factoría unificada `build_model`, funciones de desenrollado (`unroll_to_gpt`) y conversión de pesos (`looped_from_gpt`), importando las definiciones base dinámicamente.
+  > **Nota sobre el diseño**: Los *notebooks* sirvieron como entorno de prototipado y validación inicial de los modelos. Posteriormente, **todo el código de las arquitecturas definido en ellos fue extraído y consolidado en `src/model.py`**, dotándolo de tipado estático estricto, manejo robusto de excepciones y desacoplándolo del entorno interactivo.
+
+* **`src/` (Código fuente modular de Python)**:
+  Contiene los módulos Python limpios, reutilizables y preparados para ejecución por scripts:
+  - `model.py`: Módulo donde se integró la implementación definitiva de los modelos extraídos de los cuadernos (`GPTModel`, `LoopedGPT`, `TransformerBlock`, `MultiHeadAttention`, etc.), junto al cálculo analítico de parámetros y FLOPs por token (`flops_per_token`) y utilidades de conversión bidireccional.
+  - `benchmark.py`: Medición rigurosa de uso de memoria VRAM, velocidad por paso de entrenamiento y exportación automatizada de tablas en Markdown y LaTeX para el informe.
+  - `analysis/`: Utilidades para el análisis de representaciones internas, mapas de atención y similitud de representaciones.
+
+* **`configs/` (Configuración de hiperparámetros)**:
+  Ficheros YAML para garantizar reproducibilidad sin modificar código fuente:
+  - `base.yaml`: Hiperparámetros generales por defecto (arquitectura, optimizador AdamW, planificación de tasa de aprendizaje, longitud de contexto).
+  - `experiments.yaml`: Definición formal de la matriz experimental completa (variaciones de capas $L$, iteraciones $N$, dimensión oculta $d$ y semillas).
+
+* **`tests/` (Suite de pruebas automatizadas)**:
+  - `test_model.py`: Batería de 20 tests unitarios con `pytest` que verifican la corrección matemática de `src/model.py`: equivalencia exacta entre `LoopedGPT` desenrollado y `GPTModel`, invarianza de parámetros al variar $N$, causalidad estricta de la máscara y modos de inicialización.
+
+* **`data/` (Datos y especificaciones)**:
+  Directorio donde se generan y leen los conjuntos de datos de problemas aritméticos en formato JSONL (entrenamiento, validación y test ID/OOD), acompañado de la ficha técnica `data_card.md`.
+
+* **`checkpoints/` (Pesos de modelos)**:
+  Directorio para almacenar los checkpoints de pesos entrenados (`.pt`) de cada experimento y semilla.
+
+* **`results/` (Métricas y logs experimentales)**:
+  Archivos `.json` con curvas de pérdida, precisión por nivel de dificultad, evaluaciones de inferencia y resultados de benchmarks.
+
+* **`figures/` (Gráficas y tablas generadas)**:
+  Tablas formateadas (`model_params_flops.md`, `model_params_flops.tex`, `benchmark_vram_speed.md`) y gráficas generadas listas para la memoria del trabajo.
+
+* **`paper/` (Artículo científico)**:
+  Fuentes LaTeX y recursos bibliográficos para la redacción final del artículo o memoria académica.
 
 ---
 
