@@ -1,0 +1,92 @@
+\section{Experimentos}
+\label{sec:experimentos}
+
+\begin{table*}[!t]
+\centering\small
+\setlength{\tabcolsep}{4pt}
+\input{tablas/tabla_principal}
+\caption{Exactitud (\%) por nivel, media $\pm$ desviación típica sobre tres
+semillas (niveles 1--4: test en distribución; 5 y 6: fuera de distribución;
+\emph{Plant. nuevas}: redacciones no vistas). En negrita, la mejor media.}
+\label{tab:main}
+\end{table*}
+
+\begin{figure*}[!t]
+\centering
+\figorph{loops_sweep.pdf}{\textwidth}{exactitud frente al número de iteraciones usado en test}
+\caption{Exactitud de un Looped Transformer entrenado con $N$ iteraciones al
+evaluarlo con $N'$ sin reentrenar (banda: mínimo y máximo entre semillas).}
+\label{fig:sweep}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\figorph{internal_main.pdf}{\textwidth}{logit lens, atención a los dígitos y dinámica de representación y atención}
+\caption{Interior de Looped $N{=}8$ y GPT $L{=}8$ con \emph{teacher forcing}.
+Arriba: fracción de problemas con la respuesta completa correcta al proyectar
+cada estado con la cabeza de salida (\emph{logit lens}) y atención de la posición
+de respuesta a los dígitos del enunciado, por nivel. Abajo: cambio relativo,
+rango efectivo, entropía normalizada y divergencia JS entre pasos (niveles 1--4;
+banda: mínimo y máximo entre semillas).}
+\label{fig:interno}
+\end{figure*}
+
+\subsection{Configuraciones y comparaciones controladas}
+
+Todos los modelos usan contexto de 512 caracteres, vocabulario de 97 símbolos y
+$d{=}256$ con 8 cabezas, salvo un GPT de 4 capas con $d{=}128$ y 4 cabezas
+(contraste C3). Entrenamos GPT con
+$L\in\{1,2,4,8\}$ capas y Looped Transformers con $N\in\{2,4,8\}$ iteraciones,
+con las semillas 0, 1 y 2 (24 entrenamientos de 42\,000 pasos).
+La Tabla~\ref{tab:main} indica el número de parámetros de cada modelo. La matriz
+permite tres contrastes: \textbf{(C1)}~\emph{igual cómputo}, Looped $N$ frente a GPT
+$L{=}N$, con los mismos FLOPs por token y $N$ veces más parámetros el segundo;
+\textbf{(C2)}~\emph{iguales parámetros}, Looped $N$ frente a GPT $L{=}1$, que no
+comparten el cómputo; y \textbf{(C3)}~\emph{parámetros y profundidad parecidos},
+Looped $N{=}4$ (0.97\,M de parámetros) frente a ese GPT de 4 capas con $d{=}128$
+(0.88\,M), que tiene la misma profundidad y casi los mismos parámetros pero 3.2
+veces menos FLOPs por token.
+
+\subsection{Resultados}
+
+En las comparaciones, la primera cifra es siempre la del Looped y la segunda la
+del GPT.
+
+\paragraph{Igual número de parámetros (C2).}
+Con 0.97\,M de parámetros, el Looped Transformer llega a 25.6 y 16.5\,\% en los
+niveles 3 y 4 con $N{=}2$, a 47.0 y 31.6\,\% con $N{=}4$ y a 57.2 y 45.8\,\% con
+$N{=}8$ (Tabla~\ref{tab:main}), mientras que el GPT de una capa apenas resuelve
+esos niveles (8.9 y 6.7\,\%, frente al 6.2 y 5.4\,\% de responder siempre la
+respuesta más frecuente): iterar el bloque aporta una capacidad que no se
+obtiene con más parámetros.
+
+\paragraph{Igual cómputo (C1).}
+Con $N{=}2$ y $N{=}4$ el Looped queda al nivel del GPT de igual profundidad o
+algo por debajo, dentro de la desviación entre semillas (nivel 4: 16.5 frente a
+16.9\,\% con $N{=}L{=}2$, y 31.6 frente a 34.9\,\% con $N{=}L{=}4$), con 1.8 y 3.4
+veces menos parámetros. Con $N{=}8$ iguala o supera al GPT de 8 capas, que tiene
+6.7 veces más (nivel 3: 57.2 frente a 54.3\,\%; nivel 4: 45.8 frente a
+40.2\,\%). A igual profundidad el tiempo de entrenamiento es el mismo (2.4 frente
+a 2.5~h con $D{=}8$): el bucle ahorra parámetros, no tiempo. En C3, el Looped
+$N{=}4$ supera al GPT con $d{=}128$ en los niveles 3 y 4 (47.0 frente a 35.0\,\% y
+31.6 frente a 24.3\,\%), con mucha menos varianza entre semillas.
+
+\paragraph{Generalización a más operaciones.}
+En los niveles 5 y 6 la ventaja del Looped $N{=}8$ es mayor: 33.4 y 21.2\,\%
+frente a 25.4 y 13.6\,\% del GPT de 8 capas, que apenas mejora al de 4 capas
+(23.9 y 14.5\,\%) aunque sí lo supera en los niveles 3 y 4. Una posible causa es
+que, con como máximo 4 operaciones en el entrenamiento, nada obliga a las capas
+adicionales del GPT a repetir un mismo paso: ganan capacidad para ajustar los
+niveles 1 a 4, mientras que el bucle debe aprender un paso reutilizable. Los
+problemas OOD no son más largos que los de entrenamiento (411 caracteres como
+máximo en ambos), así que no se trata de posiciones no vistas.
+
+\paragraph{Número de iteraciones necesarias (P2).}
+La Fig.~\ref{fig:sweep} varía las iteraciones en test sin reentrenar. Con menos
+de las entrenadas la exactitud cae con rapidez, y antes cuanto más difícil es el
+nivel: con $N{=}8$, el nivel 1 alcanza 89.6\,\% con 5 iteraciones y 97.1\,\% con 7,
+mientras que el nivel 4 sigue mejorando hasta la octava (37.1\,\% con 7 y
+45.8\,\% con 8). Las iteraciones necesarias crecen con la dificultad. Con
+más de las entrenadas la exactitud también baja, y más deprisa cuanto menor es
+$N$ ($N{=}4$ con 8 iteraciones: nivel 1 de 97.3 a 77.7\,\%), y en los niveles 5 y 6 el máximo está en $N$ o en $N{+}1$, por
+lo que no observamos extrapolación en profundidad.

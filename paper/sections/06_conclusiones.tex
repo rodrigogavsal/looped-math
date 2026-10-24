@@ -1,0 +1,17 @@
+\section{Conclusiones y limitaciones}
+
+Un único bloque iterado ocho veces (0.97\,M de parámetros) iguala o supera a un
+GPT de ocho capas (6.5\,M) en los niveles difíciles y, sobre todo, fuera de la
+distribución, y con los mismos parámetros mejora con claridad al GPT de una capa
+(P1, P3). Con dos y cuatro iteraciones queda al nivel del GPT de igual
+profundidad o algo por debajo. Las iteraciones necesarias crecen con la
+dificultad (P2) y, con menos o con más de las entrenadas, la exactitud cae: no
+hay extrapolación en profundidad. Por dentro, el Looped forma la respuesta de
+forma gradual, más tarde cuanto mayor es el nivel, con casi la misma atención en
+cada iteración, mientras que el GPT la forma en la última capa (P4).
+
+\paragraph{Limitaciones.}
+Modelos pequeños y datos sintéticos, que pueden no trasladarse a modelos
+grandes ni a texto natural. Los niveles 1 y 2
+miden menos razonamiento nuevo: el 100\,\% de sus trazas de test ya aparece en
+el entrenamiento con otro texto. Hiperparámetros iguales para todos los modelos, sin ajuste por profundidad.

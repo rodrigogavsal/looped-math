@@ -1,0 +1,18 @@
+\begin{tabular}{lrccccccc}
+\toprule
+ & & \multicolumn{4}{c}{En distribución} & \multicolumn{2}{c}{OOD} & \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-8}
+Modelo & Parám. (M) & N1 & N2 & N3 & N4 & N5 & N6 & Plant. nuevas \\
+\midrule
+GPT $L{=}1$ & 0.97 & $87.6{\scriptstyle\pm0.6}$ & $35.3{\scriptstyle\pm0.3}$ & $8.9{\scriptstyle\pm0.6}$ & $6.7{\scriptstyle\pm0.6}$ & $5.1{\scriptstyle\pm0.4}$ & $4.1{\scriptstyle\pm0.3}$ & $16.1{\scriptstyle\pm0.8}$ \\
+GPT $L{=}2$ & 1.76 & $96.8{\scriptstyle\pm0.5}$ & $73.1{\scriptstyle\pm3.5}$ & $26.1{\scriptstyle\pm3.4}$ & $16.9{\scriptstyle\pm1.7}$ & $12.5{\scriptstyle\pm0.9}$ & $8.9{\scriptstyle\pm0.4}$ & $22.4{\scriptstyle\pm2.4}$ \\
+GPT $L{=}4$ & 3.34 & $96.9{\scriptstyle\pm0.2}$ & $78.7{\scriptstyle\pm1.8}$ & $48.8{\scriptstyle\pm4.1}$ & $34.9{\scriptstyle\pm4.1}$ & $23.9{\scriptstyle\pm3.0}$ & $14.5{\scriptstyle\pm1.8}$ & $25.5{\scriptstyle\pm1.9}$ \\
+GPT $L{=}8$ & 6.49 & $97.0{\scriptstyle\pm0.2}$ & $\mathbf{80.9}{\scriptstyle\pm0.4}$ & $54.3{\scriptstyle\pm2.1}$ & $40.2{\scriptstyle\pm1.8}$ & $25.4{\scriptstyle\pm2.7}$ & $13.6{\scriptstyle\pm1.7}$ & $26.7{\scriptstyle\pm0.6}$ \\
+\midrule
+Looped $N{=}2$ & 0.97 & $96.9{\scriptstyle\pm0.4}$ & $71.9{\scriptstyle\pm0.4}$ & $25.6{\scriptstyle\pm1.2}$ & $16.5{\scriptstyle\pm0.2}$ & $12.2{\scriptstyle\pm0.4}$ & $9.0{\scriptstyle\pm0.4}$ & $21.1{\scriptstyle\pm1.7}$ \\
+Looped $N{=}4$ & 0.97 & $\mathbf{97.3}{\scriptstyle\pm0.2}$ & $78.7{\scriptstyle\pm0.6}$ & $47.0{\scriptstyle\pm1.1}$ & $31.6{\scriptstyle\pm0.3}$ & $21.1{\scriptstyle\pm2.3}$ & $14.0{\scriptstyle\pm0.1}$ & $23.3{\scriptstyle\pm1.0}$ \\
+Looped $N{=}8$ & 0.97 & $97.1{\scriptstyle\pm0.2}$ & $79.0{\scriptstyle\pm0.2}$ & $\mathbf{57.2}{\scriptstyle\pm1.1}$ & $\mathbf{45.8}{\scriptstyle\pm1.4}$ & $\mathbf{33.4}{\scriptstyle\pm2.2}$ & $\mathbf{21.2}{\scriptstyle\pm2.2}$ & $\mathbf{29.8}{\scriptstyle\pm4.2}$ \\
+\midrule
+GPT $L{=}4$ ($d{=}128$) & 0.88 & $96.5{\scriptstyle\pm0.5}$ & $65.5{\scriptstyle\pm7.4}$ & $35.0{\scriptstyle\pm10.7}$ & $24.3{\scriptstyle\pm8.7}$ & $16.5{\scriptstyle\pm5.1}$ & $11.3{\scriptstyle\pm3.0}$ & $22.6{\scriptstyle\pm2.5}$ \\
+\bottomrule
+\end{tabular}
