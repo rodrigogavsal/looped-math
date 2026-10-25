@@ -22,12 +22,7 @@ evaluarlo con $N'$ sin reentrenar (banda: mínimo y máximo entre semillas).}
 \begin{figure*}[!t]
 \centering
 \figorph{internal_main.pdf}{\textwidth}{logit lens, atención a los dígitos y dinámica de representación y atención}
-\caption{Interior de Looped $N{=}8$ y GPT $L{=}8$ con \emph{teacher forcing}.
-Arriba: fracción de problemas con la respuesta completa correcta al proyectar
-cada estado con la cabeza de salida (\emph{logit lens}) y atención de la posición
-de respuesta a los dígitos del enunciado, por nivel. Abajo: cambio relativo,
-rango efectivo, entropía normalizada y divergencia JS entre pasos (niveles 1--4;
-banda: mínimo y máximo entre semillas).}
+\caption{Interior de Looped $N{=}8$ y GPT $L{=}8$. Arriba: \emph{logit lens} y atención a dígitos (por nivel). Abajo: cambio relativo $\Delta_t$, rango efectivo, entropía y divergencia JS entre pasos.}
 \label{fig:interno}
 \end{figure*}
 

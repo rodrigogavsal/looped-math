@@ -14,12 +14,12 @@ Estudiamos esta propuesta a pequeña escala y con control total de los datos:
 entrenamos desde cero GPT y Looped Transformers de pocos millones de parámetros
 en problemas aritméticos en castellano cuya dificultad es el número de
 operaciones. Buscamos responder a \textbf{(P1)}~si un bucle de $N$ iteraciones
-iguala a un GPT de $N$ capas con $N$ veces menos parámetros,
+iguala a un GPT de $N$ capas con aproximadamente $N$ veces menos parámetros (al compartir el bloque),
 \textbf{(P2)}~si las iteraciones necesarias crecen con la dificultad y
 \textbf{(P3)}~si el modelo generaliza a problemas con más operaciones que los
 vistos al entrenar.\ifinterno{} Además, \textbf{(P4)}~analizamos el interior del bucle con \emph{logit lens} y métricas de representación y atención.\fi{}
 
-Aportamos una implementación propia, sobre el código de \citet{raschka2024build},
+Aportamos una implementación propia\footnote{\url{https://github.com/rodrigogavsal/looped-math}}, sobre el código de \citet{raschka2024build},
 de ambos modelos con una interfaz común y validada numéricamente
 (Sec.~\ref{sec:validacion}); un conjunto de problemas sintéticos con seis niveles
 y los dos más difíciles reservados para evaluación (Sec.~\ref{sec:datos}); y una
