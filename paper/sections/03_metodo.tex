@@ -1,0 +1,68 @@
+\section{Método}
+
+\subsection{Arquitecturas}
+\label{sec:arquitecturas}
+
+Ambos modelos comparten el bloque de GPT-2 \citep{radford2019language}:
+normalización previa, atención multicabeza causal, red \emph{feed-forward} de
+dimensión $4d$ con GELU y conexiones residuales,
+$B_\theta(\hid{}) = \mathbf{u} + \FFN(\LN_2(\mathbf{u}))$ con
+$\mathbf{u} = \hid{} + \MHA(\LN_1(\hid{}))$. La entrada es la suma de los
+\emph{embeddings} de carácter y de posición (aprendido), $\hid{0}$, y la salida
+$\mathrm{softmax}(W_o\,\LN(\hid{D}))$ con $D$ la profundidad efectiva. Un
+\textbf{GPT} de $L$ capas usa bloques distintos, $\hid{\ell}=B_{\theta_\ell}(\hid{\ell-1})$;
+un \textbf{Looped Transformer} de $N$ iteraciones reutiliza el mismo,
+\begin{equation}
+\hid{t} = B_\theta(\hid{t-1}),\qquad t = 1,\dots,N,
+\end{equation}
+con $D=L$ y $D=N$ respectivamente. Con dimensión $d$, vocabulario $V$ y contexto
+$T$, un bloque tiene $P_B = 12d^2 + 10d$ parámetros y el resto del modelo
+$P_E = (2V+T)d + 2d$, de modo que $P_\text{GPT}(L) = L\,P_B + P_E$ y
+$P_\text{Looped}(N) = P_B + P_E$ no depende de $N$, mientras que el cómputo por
+token, $F(D) \approx D\,(24d^2 + 4Td) + 2dV$, crece con $D$ en ambos.
+
+\subsection{Implementación y validación}
+\label{sec:validacion}
+
+Partimos del código de \citet{raschka2024build}, con la atención explícita para
+devolver sus pesos; ambos modelos exponen la misma interfaz (logits, estados
+ocultos y atenciones por paso). Comprobamos la corrección con pruebas
+automáticas: Looped con $N{=}1$ coincide con GPT con $L{=}1$ y mismos
+pesos ($10^{-6}$); Looped con $N\in\{2,4,8,12\}$ coincide, en logits y en todos
+los estados ocultos, con un GPT de $N$ capas con copias del bloque compartido
+($10^{-5}$); el número de parámetros no depende de $N$ y la atención es causal.
+
+\subsection{Datos}
+\label{sec:datos}
+
+Cada ejemplo es una historia breve en castellano cuyo nivel es el número de
+operaciones, de 1 a 6: suma, resta, doble, triple, mitad y tercera y cuarta
+parte, con números de hasta 20 en el enunciado y respuestas entre 1 y 99. Hay
+relatos con un protagonista o un recipiente (tipo~A) y problemas de comparación
+entre varias personas (tipo~B) cuyas frases pueden estar desordenadas, en
+estilo detallado o compacto y a partir de plantillas. Un ejemplo de nivel~2 con frases desordenadas:
+\begin{quote}\small
+\emph{Julia tiene la mitad que Laura. Laura tiene el triple de postales que Pablo.
+Pablo tiene 18 postales. Entonces, ¿cuántas postales tiene Julia?}\ \ $\to$ 27
+\end{quote}
+Cada ejemplo guarda su traza de operaciones, con la que se verifica la
+respuesta, y ninguna pregunta de validación o de test aparece en el
+entrenamiento. Los niveles 1--4 se reparten en entrenamiento (200\,000
+ejemplos, 50\,000 por nivel), validación (4\,000) y test en distribución
+(ID, 8\,000, 2\,000 por nivel). Un segundo test de plantillas nuevas (8\,000
+ejemplos) usa 18 redacciones reservadas que no aparecen en el entrenamiento.
+Los niveles 5 y 6 (4\,000 ejemplos) solo se usan como test fuera de
+distribución (OOD). Las heurísticas sin razonamiento (respuesta más frecuente, primer o último número) aciertan entre el 0.6 y el 7.6\,\%.
+
+\subsection{Entrenamiento y evaluación}
+\label{sec:entrenamiento}
+
+El texto de entrada es \texttt{Pregunta: \dots\textbackslash nRespuesta: } seguido
+del número y de un fin de secuencia, tokenizado por caracteres (97 símbolos); la
+pérdida se calcula solo sobre la respuesta. Usamos AdamW
+\citep{loshchilov2019decoupled} ($\beta=(0.9, 0.95)$, decaimiento 0.1), tasa
+$10^{-3}$ con calentamiento de 200 pasos y decaimiento coseno hasta el 10\,\%,
+lotes de 64, recorte de gradiente 1.0 y precisión mixta, durante 42\,000 pasos y con tres semillas (0, 1 y 2).
+Evaluamos por generación voraz (hasta 6 caracteres, primer entero extraído) y
+medimos la exactitud por nivel (coincidencia exacta); en los modelos con bucles variamos las
+iteraciones en test, $N'$, de 1 a $2N$ sin reentrenar.

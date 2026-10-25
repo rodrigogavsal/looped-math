@@ -1,0 +1,28 @@
+\section{Introducción}
+
+Los Transformers resuelven los problemas de varios pasos aplicando una sucesión
+de capas, cada una con sus propios parámetros. La profundidad parece clave para
+el razonamiento \citep{saunshi2025reasoning}, pero añadir capas encarece de forma
+lineal los parámetros, la memoria y el entrenamiento. El Universal
+Transformer \citep{dehghani2019universal} ya aplica de forma recurrente un mismo
+bloque; trabajos recientes lo estudian como \emph{Looped Transformer}: un único
+bloque aplicado $N$ veces sobre su propia salida, con profundidad de cómputo
+creciente y parámetros constantes
+\citep{giannou2023looped,saunshi2025reasoning,geiping2025scaling}.
+
+Estudiamos esta propuesta a pequeña escala y con control total de los datos:
+entrenamos desde cero GPT y Looped Transformers de pocos millones de parámetros
+en problemas aritméticos en castellano cuya dificultad es el número de
+operaciones. Buscamos responder a \textbf{(P1)}~si un bucle de $N$ iteraciones
+iguala a un GPT de $N$ capas con $N$ veces menos parámetros,
+\textbf{(P2)}~si las iteraciones necesarias crecen con la dificultad y
+\textbf{(P3)}~si el modelo generaliza a problemas con más operaciones que los
+vistos al entrenar.\ifinterno{} Además, \textbf{(P4)}~analizamos el interior del bucle con \emph{logit lens} y métricas de representación y atención.\fi{}
+
+Aportamos una implementación propia, sobre el código de \citet{raschka2024build},
+de ambos modelos con una interfaz común y validada numéricamente
+(Sec.~\ref{sec:validacion}); un conjunto de problemas sintéticos con seis niveles
+y los dos más difíciles reservados para evaluación (Sec.~\ref{sec:datos}); y una
+comparación controlada a igual cómputo y a igual número de parámetros, con
+barrido de iteraciones y análisis interno del bucle
+(Secs.~\ref{sec:experimentos} y~\ref{sec:analisis}).

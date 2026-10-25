@@ -1,0 +1,32 @@
+\section{Análisis}
+\label{sec:analisis}
+
+\paragraph{Logit lens (P2).}
+Con \emph{teacher forcing} y 200 problemas por nivel ID (100 OOD), proyectamos cada estado de la posición de inicio de la
+respuesta con la cabeza de salida (\emph{logit lens}, \citealp{nostalgebraist2020logitlens}),
+$\hat y_t = \arg\max_v[\mathrm{head}(\hid{t})]_v$, y llamamos paso de resolución
+al primer $t$ desde el que la respuesta es correcta hasta el final. En el Looped
+$N{=}8$ la respuesta se forma de manera gradual y más tarde cuanto mayor es el
+nivel: el paso medio de resolución pasa de 4.2 en el nivel 1 a 6.5 en el 4 y a
+7.0 en el 6 (Fig.~\ref{fig:interno}, arriba a la izquierda). En el GPT de 8 capas,
+en cambio, la respuesta casi no aparece en las capas intermedias (27\,\% con 7
+capas en el nivel 1) y surge en la última, sea cual sea el nivel (paso medio 7.6
+a 7.8).
+
+\paragraph{Representaciones y atención (P4).}
+En ambos modelos el rango efectivo \citep{roy2007effective}, que mide cuántas direcciones usa el estado, baja de unos 145 a unos 46. En el Looped el
+cambio relativo $\Delta_t$ se reduce de 4.1 a 0.2, pero la norma crece de 2.5 a
+61.5, así que no hay evidencia de un punto fijo. Su atención es casi la misma en
+cada iteración (divergencia JS de 0.23 entre las dos primeras y de 0.01 o menos
+desde la sexta), mientras que cada
+capa del GPT atiende de forma distinta (JS de 0.24 a 0.60). La atención de la posición de respuesta
+a los dígitos del enunciado decrece en el Looped cuando la respuesta ya está
+formada (nivel 1: de 0.43 a 0.12) y menos en los niveles difíciles (nivel 6: de
+0.31 a 0.25).
+
+\paragraph{Tipos de problema y plantillas nuevas.}
+En los modelos de profundidad 4 y 8, los problemas de tipo~B (comparación entre
+varias personas) con frases desordenadas se resuelven en torno al 40\,\%, frente
+al 75--86\,\% de los de tipo~A (relatos de un protagonista o un recipiente). Con redacciones nuevas la exactitud
+cae de 64--70\,\% a 23--30\,\%:
+los modelos dependen de las plantillas vistas.
