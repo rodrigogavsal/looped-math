@@ -182,36 +182,3 @@ Para ejecutar de forma reanudable y secuencial todos los modelos de `configs/exp
 ```bash
 python -m src.run
 ```
-
----
-
-## 4. Registro de máquinas del equipo
-
-Ejecutad `python check_env.py` en cada ordenador y anotad los datos en la siguiente tabla:
-
-| Miembro | SO | PyTorch | GPU | VRAM (GB) | Soporta `bf16` |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| Máquina 1 | Windows 11 (AMD64) | 2.14.0+cpu | CPU (CUDA no disponible) | - | No |
-| Máquina 2 | *Pendiente* | - | - | - | - |
-| Máquina 3 | *Pendiente* | - | - | - | - |
-| Máquina 4 | *Pendiente* | - | - | - | - |
-
----
-
-## 5. Tabla de Parámetros y FLOPs de la Matriz Experimental
-
-Valores calculados con `vocab_size = 97` y `context_length = 512` (`python -m src.benchmark --skip-benchmark`):
-
-| Modelo | Arq. | $d$ | Cabezas | Bloques ($L$) | Loops ($N$) | Prof. efectiva | Parámetros | Parámetros (M) | FLOPs / token (M) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `gpt_L1_d256` | GPT | 256 | 8 | 1 | 1 | 1 | 970,240 | 0.970 | 2.15 |
-| `gpt_L2_d256` | GPT | 256 | 8 | 2 | 1 | 2 | 1,759,232 | 1.759 | 4.24 |
-| `gpt_L4_d256` | GPT | 256 | 8 | 4 | 1 | 4 | 3,337,216 | 3.337 | 8.44 |
-| `gpt_L8_d256` | GPT | 256 | 8 | 8 | 1 | 8 | 6,493,184 | 6.493 | 16.83 |
-| `gpt_L12_d256` | GPT | 256 | 8 | 12 | 1 | 12 | 9,649,152 | 9.649 | 25.22 |
-| `looped_N2_d256` | Looped | 256 | 8 | 1 | 2 | 2 | 970,240 | 0.970 | 4.24 |
-| `looped_N4_d256` | Looped | 256 | 8 | 1 | 4 | 4 | 970,240 | 0.970 | 8.44 |
-| `looped_N8_d256` | Looped | 256 | 8 | 1 | 8 | 8 | 970,240 | 0.970 | 16.83 |
-| `looped_N12_d256` | Looped | 256 | 8 | 1 | 12 | 12 | 970,240 | 0.970 | 25.22 |
-| `gpt_L4_d128` *(opc.)* | GPT | 128 | 4 | 4 | 1 | 4 | 882,176 | 0.882 | 2.65 |
-
