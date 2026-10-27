@@ -6,12 +6,8 @@ distribución, y con los mismos parámetros mejora con claridad al GPT de una ca
 (P1, P3). Con dos y cuatro iteraciones queda al nivel del GPT de igual
 profundidad o algo por debajo. Las iteraciones necesarias crecen con la
 dificultad (P2) y, con menos o con más de las entrenadas, la exactitud cae: no
-hay extrapolación en profundidad. Por dentro, el Looped forma la respuesta de
-forma gradual, más tarde cuanto mayor es el nivel, con casi la misma atención en
-cada iteración, mientras que el GPT la forma en la última capa (P4).
+hay extrapolación en profundidad. Por dentro, el Looped resuelve más problemas a medida que itera, y más tarde cuanto mayor es el nivel, con casi la misma atención en cada iteración, mientras que el GPT los resuelve en la última capa (P4).
 
 \paragraph{Limitaciones.}
-Modelos pequeños y datos sintéticos, que pueden no trasladarse a modelos
-grandes ni a texto natural. Los niveles 1 y 2
-miden menos razonamiento nuevo: el 100\,\% de sus trazas de test ya aparece en
-el entrenamiento con otro texto. Hiperparámetros iguales para todos los modelos, sin ajuste por profundidad.
+Modelos pequeños y datos sintéticos. Los niveles 1 y 2 miden menos razonamiento nuevo: el 100\,\% de sus trazas de test ya aparece en
+el entrenamiento con otro texto. Hiperparámetros comunes, sin ajuste por profundidad.
