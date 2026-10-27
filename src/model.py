@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 
 DEFAULT_MODEL_CFG: Dict[str, Any] = {
@@ -25,7 +27,15 @@ DEFAULT_MODEL_CFG: Dict[str, Any] = {
 
 
 class MultiHeadAttention(nn.Module):
-    """Atención multi-cabeza causal con extracción opcional de mapas de atención."""
+    """Atención multi-cabeza causal con extracción opcional de mapas de atención.
+
+    Dos caminos que calculan lo mismo:
+      - return_attn=False (entrenamiento y evaluación normal): F.scaled_dot_product_attention.
+        No materializa la matriz de pesos (b, h, T, T), así que gasta mucha menos memoria;
+        con la versión explícita, GPT de 4 capas y batch 64 no cabe en una GPU de 4 GB.
+      - return_attn=True (análisis): la versión explícita del notebook, que devuelve los pesos.
+    La diferencia numérica entre ambos caminos es de ~1e-6 (lo comprueba tests/test_model.py).
+    """
 
     def __init__(
         self,
@@ -69,6 +79,16 @@ class MultiHeadAttention(nn.Module):
         queries = queries.view(b, num_tokens, self.num_heads, self.head_dim).transpose(1, 2)
         values = values.view(b, num_tokens, self.num_heads, self.head_dim).transpose(1, 2)
 
+        if not return_attn:
+            # Camino eficiente en memoria (mismo cálculo que el explícito de abajo).
+            context_vec = F.scaled_dot_product_attention(
+                queries, keys, values,
+                dropout_p=self.dropout.p if self.training else 0.0,
+                is_causal=True,
+            )
+            context_vec = context_vec.transpose(1, 2).contiguous().view(b, num_tokens, self.d_out)
+            return self.out_proj(context_vec)
+
         attn_scores = queries @ keys.transpose(2, 3)
         mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
         attn_scores.masked_fill_(mask_bool, -torch.inf)
@@ -108,12 +128,9 @@ class GELU(nn.Module):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return 0.5 * x * (
-            1.0 + torch.tanh(
-                torch.sqrt(torch.tensor(2.0 / torch.pi, device=x.device, dtype=x.dtype))
-                * (x + 0.044715 * torch.pow(x, 3))
-            )
-        )
+        # Misma fórmula que el notebook (0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))),
+        # pero con el kernel fusionado de PyTorch: no guarda los intermedios y ahorra memoria.
+        return F.gelu(x, approximate="tanh")
 
 
 class FeedForward(nn.Module):
@@ -190,6 +207,15 @@ class GPTModel(nn.Module):
 
         self.final_norm = LayerNorm(cfg["emb_dim"])
         self.out_head = nn.Linear(cfg["emb_dim"], cfg["vocab_size"], bias=False)
+        # Checkpointing de activaciones: si es True, al entrenar no se guardan las activaciones
+        # internas de cada bloque y se recalculan en el backward (menos memoria, ~30 % más lento).
+        # No cambia el resultado. Lo activa train.py con cfg["grad_checkpoint"].
+        self.grad_checkpoint = bool(cfg.get("grad_checkpoint", False))
+
+    def _run_block(self, block: nn.Module, x: torch.Tensor) -> torch.Tensor:
+        if self.grad_checkpoint and self.training and torch.is_grad_enabled():
+            return checkpoint(block, x, use_reentrant=False)
+        return block(x, return_attn=False)
 
     def embed(self, in_idx: torch.Tensor) -> torch.Tensor:
         """Calcula el estado inicial h_0 sumando embeddings de token y posición."""
@@ -212,7 +238,7 @@ class GPTModel(nn.Module):
         x = self.embed(in_idx)
         if not return_hidden and not return_attn:
             for block in self.trf_blocks:
-                x = block(x, return_attn=False)
+                x = self._run_block(block, x)
             return self.head(x)
 
         extras: Dict[str, List[torch.Tensor]] = {}
@@ -279,7 +305,7 @@ class LoopedGPT(GPTModel):
                 h, attn_w = block(h, return_attn=True)
                 attns.append(attn_w)
             else:
-                h = block(h, return_attn=False)
+                h = self._run_block(block, h)
         return (h, attns) if (return_attn and attns is not None) else h
 
     def forward(

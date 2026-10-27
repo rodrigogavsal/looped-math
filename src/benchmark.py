@@ -130,8 +130,10 @@ def benchmark_single_config(
     seq_len: int = 512,
     warmup_steps: int = 2,
     timed_steps: int = 5,
-    total_train_steps: int = 10000,
+    total_train_steps: int = 42000,
     precision: str = "auto",
+    grad_accum: int = 1,
+    grad_checkpoint: bool = False,
 ) -> Dict[str, Any]:
     """
     Ejecuta pasos de entrenamiento (forward + backward + clip_grad + AdamW) con datos
@@ -142,6 +144,7 @@ def benchmark_single_config(
         torch.cuda.reset_peak_memory_stats(device)
 
     model = build_model(cfg).to(device)
+    model.grad_checkpoint = grad_checkpoint
     model.train()
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=1e-3, betas=(0.9, 0.95), weight_decay=0.1
@@ -150,22 +153,27 @@ def benchmark_single_config(
     scaler = torch.amp.GradScaler("cuda", enabled=use_scaler)
 
     vocab_size = int(cfg["vocab_size"])
-    x = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
-    y = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+    micro = batch_size // grad_accum
+    x = torch.randint(0, vocab_size, (micro, seq_len), device=device)
+    y = torch.randint(0, vocab_size, (micro, seq_len), device=device)
 
     def _one_step() -> None:
+        # Igual que train.py: grad_accum trozos de batch_size/grad_accum ejemplos por paso.
         optimizer.zero_grad(set_to_none=True)
-        with amp_ctx:
-            logits = model(x)
-            loss = F.cross_entropy(logits.view(-1, vocab_size), y.view(-1))
+        for _ in range(grad_accum):
+            with amp_ctx:
+                logits = model(x)
+                loss = F.cross_entropy(logits.view(-1, vocab_size), y.view(-1)) / grad_accum
+            if use_scaler:
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
         if use_scaler:
-            scaler.scale(loss).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             scaler.step(optimizer)
             scaler.update()
         else:
-            loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
@@ -199,6 +207,8 @@ def benchmark_single_config(
         "arch": cfg["arch"],
         "effective_depth": effective_depth(cfg),
         "batch_size": batch_size,
+        "grad_accum": grad_accum,
+        "grad_checkpoint": grad_checkpoint,
         "seq_len": seq_len,
         "sec_per_step": round(sec_per_step, 4),
         "tokens_per_sec": round((batch_size * seq_len) / sec_per_step, 1),
@@ -208,14 +218,16 @@ def benchmark_single_config(
     }
 
 
-def format_benchmark_markdown(bench_rows: List[Dict[str, Any]], device_desc: str) -> str:
+def format_benchmark_markdown(bench_rows: List[Dict[str, Any]], device_desc: str, total_steps: int = 42000) -> str:
     """Formatea los resultados del benchmark en una tabla Markdown."""
+    if not bench_rows:
+        return f"**Dispositivo medido**: {device_desc}  \nNinguna configuración cabe en memoria."
     lines = [
         f"**Dispositivo medido**: {device_desc}  ",
         f"**Configuración de paso**: `batch_size = {bench_rows[0]['batch_size']}`, `seq_len = {bench_rows[0]['seq_len']}`",
         "",
-        "| Modelo | Prof. | Segundos / paso | Tokens / s | VRAM Pico (MB) | Horas est. (1 run, 10k pasos) | Horas est. (3 semillas) |",
-        "| :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        f"| Modelo | Prof. | Memoria | Segundos / paso | Tokens / s | VRAM Pico (MB) | Horas est. (1 run, {total_steps} pasos) | Horas est. (3 semillas) |",
+        "| :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: |",
     ]
     total_1_seed = 0.0
     total_3_seeds = 0.0
@@ -223,13 +235,14 @@ def format_benchmark_markdown(bench_rows: List[Dict[str, Any]], device_desc: str
         total_1_seed += r["est_hours_per_run"]
         total_3_seeds += r["est_hours_3_seeds"]
         vram_str = f"{r['peak_vram_mb']:.1f}" if r["peak_vram_mb"] > 0 else "CPU"
+        mem = f"grad_accum={r.get('grad_accum', 1)}" + (" + ckpt" if r.get("grad_checkpoint") else "")
         lines.append(
-            f"| `{r['name']}` | {r['effective_depth']} | {r['sec_per_step']:.4f} s | "
+            f"| `{r['name']}` | {r['effective_depth']} | {mem} | {r['sec_per_step']:.4f} s | "
             f"{r['tokens_per_sec']:,.0f} | {vram_str} | "
             f"{r['est_hours_per_run']:.2f} h | {r['est_hours_3_seeds']:.2f} h |"
         )
     lines.append(
-        f"| **TOTAL MATRIZ** | - | - | - | - | **{total_1_seed:.2f} h** | **{total_3_seeds:.2f} h** |"
+        f"| **TOTAL MATRIZ** | - | - | - | - | - | **{total_1_seed:.2f} h** | **{total_3_seeds:.2f} h** |"
     )
     return "\n".join(lines)
 
@@ -242,10 +255,11 @@ def main() -> None:
         description="Genera la tabla de parámetros/FLOPs y ejecuta el benchmark de VRAM y velocidad."
     )
     parser.add_argument("--batch-size", type=int, default=64, help="Tamaño de batch (por defecto: 64)")
-    parser.add_argument("--seq-len", type=int, default=512, help="Longitud de secuencia (por defecto: 512)")
+    parser.add_argument("--seq-len", type=int, default=411,
+                        help="Longitud de secuencia (por defecto: 411, el ejemplo más largo del dataset; peor caso real)")
     parser.add_argument("--warmup", type=int, default=1, help="Pasos de calentamiento (por defecto: 1)")
     parser.add_argument("--steps", type=int, default=3, help="Pasos medidos por modelo (por defecto: 3)")
-    parser.add_argument("--total-steps", type=int, default=10000, help="Pasos totales de un run para estimar horas")
+    parser.add_argument("--total-steps", type=int, default=42000, help="Pasos totales de un run para estimar horas")
     parser.add_argument("--skip-benchmark", action="store_true", help="Solo genera la tabla de parámetros y FLOPs")
     parser.add_argument("--no-optional", action="store_true", help="Excluye la configuración opcional gpt_L4_d128")
     args = parser.parse_args()
@@ -284,24 +298,45 @@ def main() -> None:
     print(f"\n=== BENCHMARK DE MEMORIA Y VELOCIDAD ({device_desc}) ===")
     print(f"Ejecutando {args.steps} pasos medidos (+{args.warmup} warmup) con batch={args.batch_size} x seq_len={args.seq_len}...\n")
 
+    # Si una configuración no cabe en memoria, se prueba con el batch partido en 2 y 4 trozos
+    # (grad_accum) y, por último, con checkpointing de activaciones. El resultado del
+    # entrenamiento es el mismo en todos los casos; solo cambian la memoria y la velocidad.
+    # La primera opción que cabe es la que hay que poner en configs/experiments.yaml.
+    ladder = [(1, False), (2, False), (4, False), (4, True)]
     bench_rows: List[Dict[str, Any]] = []
     for cfg in configs:
-        row = benchmark_single_config(
-            cfg=cfg,
-            device=device,
-            batch_size=args.batch_size,
-            seq_len=args.seq_len,
-            warmup_steps=args.warmup,
-            timed_steps=args.steps,
-            total_train_steps=args.total_steps,
-        )
+        row = None
+        for accum, ckpt in ladder:
+            try:
+                row = benchmark_single_config(
+                    cfg=cfg,
+                    device=device,
+                    batch_size=args.batch_size,
+                    seq_len=args.seq_len,
+                    warmup_steps=args.warmup,
+                    timed_steps=args.steps,
+                    total_train_steps=args.total_steps,
+                    grad_accum=accum,
+                    grad_checkpoint=ckpt,
+                )
+                break
+            except torch.cuda.OutOfMemoryError:
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+                print(f"  .. {cfg['name']:<16} no cabe con grad_accum={accum}"
+                      f"{' + checkpointing' if ckpt else ''}; probando la siguiente opción")
+        if row is None:
+            print(f"  -> {cfg['name']:<16} | NO CABE ni con grad_accum=4 + checkpointing")
+            continue
         bench_rows.append(row)
+        extra = f"grad_accum={row['grad_accum']}" + (" + grad_checkpoint" if row["grad_checkpoint"] else "")
         print(
             f"  -> {row['name']:<16} | {row['sec_per_step']:.4f} s/step | "
-            f"VRAM: {row['peak_vram_mb']:.1f} MB | 10k steps: {row['est_hours_per_run']:.2f} h"
+            f"VRAM: {row['peak_vram_mb']:.1f} MB | {extra} | "
+            f"{args.total_steps} pasos: {row['est_hours_per_run']:.2f} h"
         )
 
-    bench_md = format_benchmark_markdown(bench_rows, device_desc=device_desc)
+    bench_md = format_benchmark_markdown(bench_rows, device_desc=device_desc, total_steps=args.total_steps)
     (figures_dir / "benchmark_vram_speed.md").write_text(bench_md + "\n", encoding="utf-8")
     (results_dir / "benchmark_vram_speed.json").write_text(
         json.dumps({"device": device_desc, "rows": bench_rows}, indent=2, ensure_ascii=False),
