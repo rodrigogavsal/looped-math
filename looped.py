@@ -54,6 +54,9 @@ def main():
 
         test_id_path = os.path.join(args.data_dir, "test_id.jsonl")
         test_ood_path = os.path.join(args.data_dir, "test_ood.jsonl")
+        test_tpl_path = os.path.join(args.data_dir, "test_tpl.jsonl")
+        if not os.path.exists(test_tpl_path):
+            test_tpl_path = None
 
         if args.demo:
             with open(test_id_path, "r", encoding="utf-8") as f:
@@ -62,7 +65,8 @@ def main():
 
         if args.eval:
             print("Ejecutando evaluación completa...")
-            results = run_full_evaluation(model, test_id_path, test_ood_path, tokenizer, device)
+            results = run_full_evaluation(model, test_id_path, test_ood_path, tokenizer, device,
+                                          test_tpl_source=test_tpl_path)
             print(json.dumps(results, indent=2, ensure_ascii=False))
         return
 
@@ -87,6 +91,7 @@ def main():
             tokenizer=tokenizer,
             device=device,
             run_name=run_name,
+            test_tpl_source=os.path.join(args.data_dir, "test_tpl.jsonl"),
         )
         return
 

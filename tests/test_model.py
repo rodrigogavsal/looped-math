@@ -175,7 +175,7 @@ def test_build_all_experiment_matrix_configs() -> None:
     defaults = data["defaults"]
     experiments = data["experiments"]
 
-    assert len([e for e in experiments if not e.get("optional", False)]) == 9
+    assert len([e for e in experiments if not e.get("optional", False)]) == 8
 
     idx = torch.randint(0, defaults["vocab_size"], (2, 8))
     for entry in experiments:
