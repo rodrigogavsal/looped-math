@@ -22,7 +22,7 @@ evaluarlo con $N'$ sin reentrenar (banda: mínimo y máximo entre semillas).}
 \begin{figure*}[!t]
 \centering
 \figorph{internal_main.pdf}{\textwidth}{logit lens, atención a los dígitos y dinámica de representación y atención}
-\caption{Interior de Looped $N{=}8$ y GPT $L{=}8$. Arriba: \emph{logit lens} y atención a dígitos (por nivel). Abajo: cambio relativo $\Delta_t$, rango efectivo, entropía y divergencia JS entre pasos.}
+\caption{Interior de Looped $N{=}8$ y GPT $L{=}8$. Arriba: \emph{logit lens} y atención a dígitos (por nivel). Abajo (niveles 1--4; banda: mínimo y máximo entre semillas): cambio relativo $\Delta_t$, rango efectivo, entropía y divergencia JS entre pasos.}
 \label{fig:interno}
 \end{figure*}
 
@@ -35,7 +35,7 @@ $L\in\{1,2,4,8\}$ capas y Looped Transformers con $N\in\{2,4,8\}$ iteraciones,
 con las semillas 0, 1 y 2 (24 entrenamientos de 42\,000 pasos).
 La Tabla~\ref{tab:main} indica el número de parámetros de cada modelo. La matriz
 permite tres contrastes: \textbf{(C1)}~\emph{igual cómputo}, Looped $N$ frente a GPT
-$L{=}N$, con los mismos FLOPs por token y $N$ veces más parámetros el segundo;
+$L{=}N$, con los mismos FLOPs por token y hasta $N$ veces más parámetros el segundo;
 \textbf{(C2)}~\emph{iguales parámetros}, Looped $N$ frente a GPT $L{=}1$, que no
 comparten el cómputo; y \textbf{(C3)}~\emph{parámetros y profundidad parecidos},
 Looped $N{=}4$ (0.97\,M de parámetros) frente a ese GPT de 4 capas con $d{=}128$
