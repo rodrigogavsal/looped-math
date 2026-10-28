@@ -10,6 +10,9 @@ latexmk -pdf main.tex
 Requiere una distribución de LaTeX con `latexmk`. `acl.sty` y `acl_natbib.bst` son la plantilla oficial
 (<https://github.com/acl-org/acl-style-files>).
 
+`memoria.pdf` es la versión compilada de esta fuente (la que se entrega). Si se cambia algo, hay que
+recompilar y sustituirla: `cp` del `main.pdf` generado a `memoria.pdf`.
+
 ## Estructura
 
 - `main.tex`: título, autores, resumen y `\input` de las secciones.
